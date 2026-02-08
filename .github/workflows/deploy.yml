@@ -24,7 +24,8 @@ jobs:
           channel: stable
 
       - run: flutter pub get
-      - run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+      # ✅ Mobile black-screen workaround: use HTML renderer
+      - run: flutter build web --release --web-renderer html --base-href "/${{ github.event.repository.name }}/"
 
       - uses: actions/upload-pages-artifact@v3
         with:
