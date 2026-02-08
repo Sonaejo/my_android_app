@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Offline push-up counter with on-device pose & face (Flutter + MediaPipe).">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="pushup_counter">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="manifest" href="manifest.json">
+  <title>pushup_counter</title>
+
+  <style>
+    html, body { height: 100%; margin: 0; background: #000; }
+
+    #flt-glass-pane, #flutter_view, flt-glass-pane {
+      position: relative !important;
+      z-index: 9999 !important;
+      pointer-events: auto !important;
+    }
+    canvas, flt-canvas { z-index: 9999 !important; }
+
+    .no-js {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; text-align: center; padding: 24px; background:#000;
+    }
+  </style>
+
+  <!-- ===== Pose Landmarker（安全版）===== -->
+  <script type="module">
+    import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+
+    const isHttps = (location.protocol === 'https:' || location.hostname === 'localhost');
+
+    const emit = (name, detail) =>
+      window.dispatchEvent(new CustomEvent(name, { detail }));
+
+    // Flutter側へエラーを通知（pose + face）
+    const emitError = (msg) => {
+      emit('error',       { message: msg });
+      emit('face:onError',{ message: msg });
+    };
+
+    const pose = { stream: null, video: null, landmarker: null, facing: 'front', raf: null };
+
+    /* ------------------------------
+       video 要素の準備
+    ------------------------------ */
+    function ensurePoseVideo() {
+      if (pose.video) return;
+      const v = document.createElement('video');
+      v.id = 'pose-video';
+
+      Object.assign(v.style, {
+        position: 'fixed',
+        inset: '0',
+        width: '100vw',
+        height: '100vh',
+        objectFit: 'cover',
+        background: 'black',
+        zIndex: '0',
+        pointerEvents: 'none',
+        transform: 'scaleX(-1)'   // 初期は front
+      });
+
+      v.autoplay = true;
+      v.muted = true;
+      v.playsInline = true;
+      document.body.appendChild(v);
+
+      pose.video = v;
+    }
+
+    /* ------------------------------
+       カメラ開始
+    ------------------------------ */
+    async function poseStartCamera() {
+      ensurePoseVideo();
+
+      const isFront = (pose.facing !== 'back');
+      pose.video.style.transform = isFront ? 'scaleX(-1)' : 'none';
+
+      const constraints = {
+        video: {
+          facingMode: isFront ? 'user' : { ideal: 'environment' },
+          width:  { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      };
+
+      pose.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      pose.video.srcObject = pose.stream;
+
+      await pose.video.play();
+
+      emit('facing', { value: isFront ? 'front' : 'back' });
+    }
+
+    /* ------------------------------
+       Landmarker 初期化
+    ------------------------------ */
+    async function ensurePoseLandmarker() {
+      if (pose.landmarker) return pose.landmarker;
+
+      const fileset = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+      );
+
+      pose.landmarker = await PoseLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+        },
+        runningMode: "VIDEO",
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.4,
+        minPosePresenceConfidence: 0.4,
+        minTrackingConfidence: 0.4,
+      });
+
+      return pose.landmarker;
+    }
+
+    /* ------------------------------
+       座標 → named pose
+    ------------------------------ */
+    function toNamedPose(lm) {
+      if (!lm?.length) return null;
+      const p = (i) => ({ x: lm[i].x, y: lm[i].y });
+
+      return {
+        leftShoulder: p(11), rightShoulder: p(12),
+        leftElbow:    p(13), rightElbow:    p(14),
+        leftWrist:    p(15), rightWrist:    p(16),
+        leftHip:      p(23), rightHip:      p(24),
+        leftKnee:     p(25), rightKnee:     p(26),
+        leftAnkle:    p(27), rightAnkle:    p(28),
+      };
+    }
+
+    /* ------------------------------------------------
+       ★ detectForVideo 安全ガード入り poseLoop
+    ------------------------------------------------ */
+    let poseErrorShown = false;
+
+    function poseLoop() {
+      if (!pose.landmarker || !pose.video) return;
+
+      const v = pose.video;
+
+      // ★ detectForVideo を呼んではいけない状態を排除
+      if (v.readyState < 2 || v.videoWidth === 0 || v.videoHeight === 0) {
+        pose.raf = requestAnimationFrame(poseLoop);
+        return;
+      }
+
+      const now = performance.now();
+
+      try {
+        const res = pose.landmarker.detectForVideo(v, now);
+        if (res?.landmarks?.length) {
+          const named = toNamedPose(res.landmarks[0]);
+          if (named) emit('pose', { landmarks: named });
+        }
+      } catch (e) {
+        if (!poseErrorShown) {
+          poseErrorShown = true;
+          emitError('pose detectForVideo 失敗: ' + String(e));
+          console.error(e);
+        }
+      }
+
+      pose.raf = requestAnimationFrame(poseLoop);
+    }
+
+    /* ------------------------------
+       Flutter → JS API
+    ------------------------------ */
+
+    window.poseStart = async function () {
+      try {
+        poseErrorShown = false;
+
+        if (!isHttps) emitError('HTTPS でアクセスしてください（カメラ権限が必要）');
+
+        pose.facing = 'front';
+
+        await poseStartCamera();
+        await ensurePoseLandmarker();
+
+        cancelAnimationFrame(pose.raf);
+        poseLoop();
+      } catch (e) {
+        emitError('poseStart 失敗: ' + String(e));
+      }
+    };
+
+    window.poseSwitchCamera = async function () {
+      try {
+        poseErrorShown = false;
+
+        if (pose.stream) {
+          try { pose.stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+          pose.stream = null;
+        }
+
+        pose.facing = (pose.facing === 'front') ? 'back' : 'front';
+
+        await poseStartCamera();
+      } catch (e) {
+        emitError('poseSwitchCamera 失敗: ' + String(e));
+      }
+    };
+
+    window.poseStop = function () {
+      poseErrorShown = false;
+
+      if (pose.raf) {
+        cancelAnimationFrame(pose.raf);
+        pose.raf = null;
+      }
+
+      try { pose.landmarker?.close?.(); } catch (_) {}
+      pose.landmarker = null;
+
+      if (pose.stream) {
+        try { pose.stream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        pose.stream = null;
+      }
+
+      if (pose.video) {
+        try { pose.video.pause(); pose.video.srcObject = null; } catch (_) {}
+        try { pose.video.remove(); } catch (_) {}
+        pose.video = null;
+      }
+    };
+
+    // JS 全体のエラーも Flutter 側へ転送
+    window.addEventListener('error', e =>
+      emitError(String(e?.message ?? e))
+    );
+    window.addEventListener('unhandledrejection', e =>
+      emitError(String(e?.reason ?? e))
+    );
+  </script>
+
+  <!-- Face -->
+  <script type="module" src="face_runtime.js"></script>
+  <script type="module" src="face_module.js"></script>
+
+</head>
+
+<body>
+  <noscript>
+    <div class="no-js">
+      このアプリを利用するには JavaScript を有効にしてください。
+    </div>
+  </noscript>
+
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

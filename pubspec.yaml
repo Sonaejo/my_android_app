@@ -1,0 +1,62 @@
+name: android_app
+description: A new Flutter project.
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.2.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # === UI/便利系 ===
+  cupertino_icons: ^1.0.8
+  url_launcher: ^6.3.0
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
+
+  # === 通知・権限系 ===
+  flutter_local_notifications: ^17.0.0
+  timezone: ^0.9.0
+  permission_handler: ^11.3.0
+
+  # === Webビュー（JSレポートをモバイル/デスクトップで表示） ===
+  webview_flutter: ^4.7.0
+
+  # === 筋トレカメラ機能関連 ===
+  camera: ^0.10.6
+  google_mlkit_pose_detection: ^0.12.0
+  # ★ 追加：顔認証（オプション機能の独立画面/設定用）
+  google_mlkit_face_detection: ^0.11.0
+
+  vector_math: ^2.1.4
+  collection: ^1.18.0
+
+  # === Web用 MediaPipe 連携（CustomEvent 等） ===
+  universal_html: ^2.2.4
+
+  # === 設定の永続化 ===
+  shared_preferences: ^2.3.2
+
+  # === カレンダー（履歴画面用） ===
+  table_calendar: ^3.0.9
+
+  # === 音声読み上げ（フォーム指示のTTS） ===
+  flutter_tts: ^4.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  # === アセットの登録 ===
+  assets:
+    - assets/images/
+    - assets/report/
+    - assets/gifs/

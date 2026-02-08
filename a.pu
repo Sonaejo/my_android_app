@@ -1,0 +1,167 @@
+@startuml
+skinparam classAttributeIconSize 0
+skinparam dpi 120
+
+title Report Screen (BMI / Weight / Workout Stats)
+
+package "screens" {
+
+  class ReportScreen {
+    +ReportScreen()
+  }
+
+  class "_ReportScreenState" as ReportScreenState {
+    -kWindowDays : int = 90
+    -_points : List<double>
+    -_dates : List<DateTime>
+
+    +initState() : void
+    -_rebuildSeries() : void
+    -_saveWeight(kg: double) : Future<void>
+    -_saveHeight(cm: double) : Future<void>
+    -_editWeight(context: BuildContext, currentKg: double) : Future<void>
+    -_editHeight(context: BuildContext, currentCm: double) : Future<void>
+    +build(context: BuildContext) : Widget
+  }
+
+  ReportScreen "1" o-- "1" ReportScreenState
+}
+
+package "services" {
+
+  ' ====== BMI 現在値ストア ===================================
+  class BmiStore {
+    {static} weightKg : ValueListenable<double>
+    {static} heightCm : ValueListenable<double>
+
+    {static} setWeightKg(kg: double) : Future<void>
+    {static} setHeightCm(cm: double) : Future<void>
+  }
+
+  ' ====== BMI 履歴ストア ====================================
+  class BmiHistoryStore {
+    {static} entries : ValueListenable<List<BmiHistoryEntry>>
+
+    {static} init() : Future<void>
+    {static} recent(days: int) : List<BmiHistoryEntry>
+    {static} upsertToday(weightKg: double) : Future<void>
+    {static} prune(keepDays: int) : Future<void>
+  }
+
+  class BmiHistoryEntry {
+    +date : DateTime
+    +weightKg : double
+  }
+
+  ' ====== 累計ワークアウト統計 ===============================
+  class WorkoutStatsStore {
+    {static} workouts : ValueListenable<int>
+    {static} kcal : ValueListenable<double>
+    {static} seconds : ValueListenable<double>
+
+    {static} init() : Future<void>
+  }
+}
+
+package "widgets" {
+
+  class AppBottomNav {
+    +AppBottomNav(active: AppTab)
+  }
+
+  enum AppTab {
+    home
+    counter
+    report
+    others
+  }
+
+  class NumberDialSheet {
+    {static} showNumberDialEditor(...)
+  }
+}
+
+package "report_ui (internal widgets)" {
+
+  class "_WeightCard" as WeightCard {
+    -currentKg : double
+    -maxKg : double
+    -minKg : double
+    -points : List<double>
+    -dates : List<DateTime>
+    -accent : Color
+    -minY : double
+    -maxY : double
+    -compact : bool
+    -scale : double
+    -chartHeight : double
+
+    +build(context: BuildContext) : Widget
+  }
+
+  class "_LineChartPainter" as LineChartPainter {
+    -points : List<double>
+    -minY : double
+    -maxY : double
+    -accent : Color
+    -scale : double
+    {static} overrideDates : List<DateTime>?
+
+    +paint(canvas: Canvas, size: Size) : void
+  }
+
+  class "_BmiCard" as BmiCard {
+    -bmi : double
+    -heightCm : double
+    -scale : double
+    -compact : bool
+
+    +build(context: BuildContext) : Widget
+  }
+
+  class "_BmiBar" as BmiBar {
+    -value : double?
+    -scale : double
+
+    +build(context: BuildContext) : Widget
+  }
+
+  class "_MiniStat" as MiniStat {
+    -icon : IconData
+    -label : String
+    -value : String
+    -scale : double
+
+    +build(context: BuildContext) : Widget
+  }
+
+  class "_MonthHistory" as MonthHistory {
+    -scale : double
+    +build(context: BuildContext) : Widget
+  }
+
+  class "_Card" as ReportCard {
+    -padding : EdgeInsets?
+    -child : Widget
+    +build(context: BuildContext) : Widget
+  }
+
+  ' UI 内部の依存
+  WeightCard ..> LineChartPainter
+  BmiCard ..> BmiBar
+  MiniStat ..> ReportCard
+  MonthHistory ..> ReportCard
+}
+
+' ====== 依存関係（画面 → ストア / ウィジェット） =======================
+ReportScreenState ..> BmiStore : uses
+ReportScreenState ..> BmiHistoryStore : uses
+ReportScreenState ..> WorkoutStatsStore : uses
+ReportScreenState ..> AppBottomNav : uses
+ReportScreenState ..> NumberDialSheet : uses
+ReportScreenState ..> WeightCard : uses
+ReportScreenState ..> BmiCard : uses
+ReportScreenState ..> MiniStat : uses
+ReportScreenState ..> MonthHistory : uses
+
+@enduml
