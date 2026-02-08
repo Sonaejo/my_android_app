@@ -16,7 +16,8 @@ dependencies:
   url_launcher: ^6.3.0
   flutter_localizations:
     sdk: flutter
-  intl: ^0.20.2
+  # ✅ flutter_localizations が intl 0.19.0 に pin されるため合わせる
+  intl: ^0.19.0
 
   # === 通知・権限系 ===
   flutter_local_notifications: ^17.0.0
