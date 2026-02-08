@@ -2,7 +2,7 @@ name: Deploy Flutter Web to GitHub Pages
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
 
 permissions:
   contents: read
@@ -19,12 +19,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ✅ Flutter / Dart を固定（Actions環境差で壊れないように）
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: "3.24.5"   # Dart 3.5+ 世代（flutter_lints/intl衝突も起きにくい）
 
+      - run: flutter --version
       - run: flutter pub get
-      - run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+
+      # ✅ Mobile black-screen workaround: force HTML renderer
+      - run: flutter build web --release --web-renderer html --base-href "/${{ github.event.repository.name }}/"
 
       - uses: actions/upload-pages-artifact@v3
         with:
