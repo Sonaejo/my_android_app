@@ -22,9 +22,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: "3.19.6"
+          # Dart 3.5+ を含むFlutterに固定（例：Flutter 3.24系）
+          flutter-version: "3.24.5"
 
-      - run: flutter config --enable-web
+      - run: flutter --version
       - run: flutter pub get
       - run: flutter build web --release --web-renderer html --base-href "/${{ github.event.repository.name }}/"
 
@@ -35,6 +36,7 @@ jobs:
   deploy:
     environment:
       name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
     steps:
