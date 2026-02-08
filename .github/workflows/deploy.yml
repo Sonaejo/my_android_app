@@ -22,9 +22,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: "3.19.6"
 
+      - run: flutter config --enable-web
       - run: flutter pub get
-      # ✅ Mobile black-screen workaround: use HTML renderer
       - run: flutter build web --release --web-renderer html --base-href "/${{ github.event.repository.name }}/"
 
       - uses: actions/upload-pages-artifact@v3
@@ -34,7 +35,6 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
     steps:
